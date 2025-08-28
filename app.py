@@ -7,27 +7,24 @@ import pandas as pd
 from collections import defaultdict, deque
 from flask import Flask, render_template, request, redirect, url_for, flash, send_file, session
 from flask_session import Session
+from jinja2 import Environment, FileSystemLoader
 
 # --- Initialize the Flask App ---
 app = Flask(__name__)
 
-# --- Production-ready Configuration ---
-# Use an environment variable for the secret key
-# On your server, set this with `export SECRET_KEY='your_random_secret_key'`
-# or in your deployment platform's configuration settings.
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'AJOAPP_DEFAULT_DEV_KEY')
+# --- Configuration for Production ---
+# 1. SECRET_KEY: Use an environment variable for security.
+#    On your server, set this with 'export SECRET_KEY=your_long_random_key'
+#    The 'or' part is a fallback for local testing.
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your_fallback_secret_key_for_development')
 app.config["SESSION_PERMANENT"] = False
 app.config["SESSION_TYPE"] = "filesystem"
-
-# Define a persistent session directory relative to the app's root path
-SESSION_FOLDER = os.path.join(app.root_path, 'flask_session')
-os.makedirs(SESSION_FOLDER, exist_ok=True)
-app.config["SESSION_FILE_DIR"] = SESSION_FOLDER
+os.makedirs(os.path.join(app.root_path, 'flask_session'), exist_ok=True)
 Session(app)
 
 # --- Core Logic ---
 
-#region --- Helper Functions for Reporting and Validation ---
+# region --- Helper Functions for Reporting and Validation ---
 
 def process_ajo_journey(json_data: str) -> list[tuple[str, pd.DataFrame]]:
     """Extracts detailed journey information into multiple DataFrames for Excel reporting."""
@@ -39,7 +36,7 @@ def process_ajo_journey(json_data: str) -> list[tuple[str, pd.DataFrame]]:
         meta_dict = {field: journey.get(field, '') for field in meta_fields}
         meta_dict.update({'createdAt': metadata.get('createdAt', ''), 'createdBy': metadata.get('createdBy', ''), 'lastModifiedAt': metadata.get('lastModifiedAt', ''), 'lastModifiedBy': metadata.get('lastModifiedBy', ''), 'lastDeployedAt': metadata.get('lastDeployedAt', ''), 'lastDeployedBy': metadata.get('lastDeployedBy', '')})
         meta_df = pd.DataFrame(list(meta_dict.items()), columns=['Field', 'Value'])
-        
+
         read_audience, conditions, wait_steps, custom_actions = [], [], [], []
         if isinstance(nodes, list):
             for node in nodes:
@@ -53,8 +50,8 @@ def process_ajo_journey(json_data: str) -> list[tuple[str, pd.DataFrame]]:
                     wait_steps.append({'Node ID': node.get('id', ''), 'Label': data.get('label', ''), 'Wait Type': data.get('type', ''), 'Delay Duration': data.get('delay', ''), 'Custom Expression': data.get('parameterizedExpression', {}).get('plainText', '')})
                 elif node_type == 'action' and node.get('subtype') == 'custom':
                     params = "; ".join([f"{p.get('label', '')}: {p.get('parameterizedExpression', {}).get('plainText', '')}" for p in data.get('paramMappings', [])])
-                    custom_actions.append({'Node ID': node.get('id', ''), 'Label': data.get('label', ''), 'Action Name': node.get('label', ''), 'Action UID': data.get('uid', ''), 'URL Path': data.get('urlAdditionalPath', {}).get('plainText', ''), 'Parameters': params})
-        
+                    custom_actions.append({'Node ID': node.get('id', ''), 'Label': node.get('label', ''), 'Action Name': node.get('label', ''), 'Action UID': data.get('uid', ''), 'URL Path': data.get('urlAdditionalPath', {}).get('plainText', ''), 'Parameters': params})
+
         return [('Journey Meta Data', meta_df), ('Read Audience', pd.DataFrame(read_audience)), ('Conditions', pd.DataFrame(conditions)), ('Wait Steps', pd.DataFrame(wait_steps)), ('Custom Actions', pd.DataFrame(custom_actions))]
     except (json.JSONDecodeError, TypeError, AttributeError) as e:
         return [('Error', pd.DataFrame([{'Message': f'Could not process JSON for reporting: {e}'}]))]
@@ -77,24 +74,23 @@ def replace_ws_variants_re(text):
 def generate_corrected_label(original_label, new_number, prefix):
     prefixes_to_check = ("WS_", "ws_", "Ws_")
     if prefix == 'WF' and original_label.startswith(prefixes_to_check):
-        original_label = replace_ws_variants_re(original_label)
+       original_label = replace_ws_variants_re(original_label)
     prefix_pattern = re.compile(r'^' + re.escape(prefix) + r'_\d+(_)?', re.IGNORECASE)
     descriptive_part = prefix_pattern.sub('', original_label).strip()
     return f"{prefix}_{new_number}_{descriptive_part}"
 
-#endregion
+# endregion
 
-#region --- Unified Validation and Correction Generation ---
+# region --- Unified Validation and Correction Generation ---
 
 def apply_all_transformations(original_path_name: str, path_type: str, journey_suffix: str, replacements: list, league_club_code: str) -> str:
-    """Applies all necessary transformations to a path name."""
     corrected = original_path_name
     for old, new in replacements:
         corrected = corrected.replace(old, new)
     if not corrected.endswith(journey_suffix):
         corrected += journey_suffix
-    if path_type == 'opposite' and not corrected.startswith(f"{league_club_code}_Non"):
-        corrected = f"{league_club_code}_Non" + corrected
+    if path_type == 'opposite' and not corrected.startswith(league_club_code + '_Non'):
+        corrected = league_club_code + '_Non' + corrected
     return corrected
 
 def validate_and_generate_all_corrections(data: dict, journey_suffix: str, replacements: list, triggers: list, league_club_code: str) -> tuple[list, pd.DataFrame, dict]:
@@ -109,11 +105,11 @@ def validate_and_generate_all_corrections(data: dict, journey_suffix: str, repla
         'duplicate_node_labels': {'found': 0, 'total': 0},
         'duplicate_path_names': {'found': 0, 'total': 0}
     }
-    
     journey_leadge_code = league_club_code + '_Non'
 
     potential_duplicate_node_labels = defaultdict(list)
     potential_duplicate_path_names = defaultdict(list)
+
     node_map = {node['id']: node for node in nodes}
 
     for node in nodes:
@@ -124,7 +120,7 @@ def validate_and_generate_all_corrections(data: dict, journey_suffix: str, repla
         if node_type in ["condition", "timer"] and label:
             summary['duplicate_node_labels']['total'] += 1
             potential_duplicate_node_labels[label].append(node_id)
-        
+
         if node_type == 'condition':
             for path in node.get('data', {}).get('conditions', []):
                 if path.get('conditionType') not in ['percentage']:
@@ -138,30 +134,30 @@ def validate_and_generate_all_corrections(data: dict, journey_suffix: str, repla
         for edge in edges:
             src, tgt = edge.get("source", {}).get("elementId"), edge.get("target", {}).get("elementId")
             if src and tgt: adj[src].append(tgt)
-        
+
         start_node_id = next((e.get("target", {}).get("elementId") for e in edges if e.get("source", {}).get("elementId") == "start"), None)
-        
+
         if start_node_id:
             q, visited, wf_c, ws_c = deque([start_node_id]), set(), 1, 1
             wf_p, ws_p = re.compile(r'^WF_(\d+)'), re.compile(r'^WS_(\d+)', re.IGNORECASE)
             temp_flow_results = []
-            
+
             while q:
                 curr_id = q.popleft()
                 if curr_id in visited: continue
                 visited.add(curr_id)
                 node = node_map.get(curr_id)
                 if not node: continue
-                
+
                 node_type, label = node.get("type"), node.get("data", {}).get("label", "").strip()
-                
+
                 if node_type not in ["condition", "timer"]:
                     for neighbor in adj.get(curr_id, []):
                         if neighbor not in visited: q.append(neighbor)
                     continue
-                
+
                 res_item = {"id": curr_id, "label": label, "status": "OK", "suggestion": "In sequence.", "corrected_label": label}
-                
+
                 if node_type == "condition":
                     if not (m := wf_p.search(label)) or int(m.group(1)) != wf_c:
                         corr_label = generate_corrected_label(label, wf_c, "WF")
@@ -174,7 +170,7 @@ def validate_and_generate_all_corrections(data: dict, journey_suffix: str, repla
                         res_item.update({"status": "Error", "suggestion": f"Expected WS_{ws_c}", "corrected_label": corr_label})
                         all_corrections.append({'type': 'node_label', 'id': curr_id, 'original_label': label, 'corrected_label': corr_label})
                     ws_c += 1
-                
+
                 temp_flow_results.append(res_item)
                 for neighbor in adj.get(curr_id, []):
                     if neighbor not in visited: q.append(neighbor)
@@ -188,7 +184,7 @@ def validate_and_generate_all_corrections(data: dict, journey_suffix: str, repla
                 is_pass = res['status'] == 'OK'
                 if is_pass:
                     summary['flow_sequence']['passed'] += 1
-                
+
                 report_data.append({
                     "Check Type": "Flow and Sequence Validation",
                     "Element": f"Node: '{res['label']}' (ID: {res['id']})",
@@ -196,17 +192,16 @@ def validate_and_generate_all_corrections(data: dict, journey_suffix: str, repla
                     "Status": "PASS" if is_pass else "FAIL",
                     "Details": res['suggestion']
                 })
-    
+    opresorceName = {}
     checked_node_labels = set()
     for node in (n for n in nodes if n.get('type') == 'condition'):
-        node_label = node['data']['label']
         for path in node.get('data', {}).get('conditions', []):
             if path.get('conditionType') not in ['percentage']:
                 original_path_name = path.get('name', '')
                 path_type = path.get('conditionType', '')
-                
+
                 final_corrected_name = apply_all_transformations(original_path_name, path_type, journey_suffix, replacements, league_club_code)
-                
+
                 summary['suffix']['total'] += 1
                 suffix_pass = original_path_name.endswith(journey_suffix)
                 if suffix_pass: summary['suffix']['passed'] += 1
@@ -217,11 +212,31 @@ def validate_and_generate_all_corrections(data: dict, journey_suffix: str, repla
                     "Status": "PASS" if suffix_pass else "FAIL",
                     "Details": f"Expected suffix: '{journey_suffix}'"
                 })
-                
+
+                is_OpResource = False
+
                 if path_type == 'resource':
+                    node_label = node['data']['label']
+
+                if node_label not in opresorceName:
+                    opresorceName[node_label] = []
+
+                opresorceName[node_label].append(original_path_name)
+
+                if original_path_name.startswith(journey_leadge_code):
+                    is_OpResource = True
                     checked_node_labels.add(node_label)
-                
+                    report_data.append({
+                        "Check Type": "Resource Path Check (Early Exit)",
+                        "Element": f"Path '{original_path_name}' in Node '{node['data']['label']}' (ID: {node['id']})",
+                        "Value Checked": original_path_name,
+                        "Status": "PASS",
+                        "Details": f"Path matches prefix '{journey_leadge_code}'. Node label '{node_label}' marked as checked, skipping opposite check."
+                    })
+
                 if path_type == 'opposite':
+                    node_label = node['data']['label']
+
                     if node_label not in checked_node_labels:
                         summary['opposite_prefix']['total'] += 1
                         is_prefix_valid = original_path_name.startswith(journey_leadge_code)
@@ -248,7 +263,7 @@ def validate_and_generate_all_corrections(data: dict, journey_suffix: str, repla
                             "Status": "SKIPPED",
                             "Details": f"Node label '{node_label}' was previously handled by a 'resource' path check."
                         })
-                
+
                 if final_corrected_name != original_path_name:
                     all_corrections.append({'type': 'path_name', 'node_id': node['id'], 'original_name': original_path_name, 'corrected_name': final_corrected_name})
 
@@ -277,9 +292,9 @@ def validate_and_generate_all_corrections(data: dict, journey_suffix: str, repla
 
     return all_corrections, pd.DataFrame(report_data), summary
 
-#endregion
+# endregion
 
-#region --- JSON Correction and Transformation ---
+# region --- JSON Correction and Transformation ---
 
 def correct_original_json(original_data: dict, corrections: list) -> dict:
     data = json.loads(json.dumps(original_data))
@@ -304,56 +319,41 @@ def transform_json_structure(data: dict) -> dict:
         "parentJourneyData": {"hasInlineCampaigns": data.get("hasInlineCampaigns", False), "sandboxName": data.get("sandboxName", "")}
     }
 
-#endregion
+# endregion
 
 # --- Helper function for styling ---
 def highlight_fails(row):
-    """
-    Applies a red background to a row if its 'Status' column is 'FAIL'.
-    Uses a light red color similar to Bootstrap's 'table-danger' class.
-    """
     return ['background-color: #f8d7da'] * len(row) if row.Status == 'FAIL' else [''] * len(row)
 
-#region --- Flask Routes ---
+# region --- Flask Routes ---
 
 @app.route('/upload', methods=['POST'])
 def upload():
-    """Handles file upload and processes the JSON file."""
-    if 'json_file' not in request.files:
-        flash('No file part in the request. Please select a file.', 'error')
-        return redirect(url_for('index'))
-    
-    file = request.files['json_file']
-    if file.filename == '':
-        flash('No file selected. Please choose a JSON file.', 'error')
-        return redirect(url_for('index'))
-    
-    try:
-        journey_data = json.load(file)
-        session['journey_data'] = journey_data
-        session['original_filename'] = file.filename
-        return redirect(url_for('process_upload_journey'))
-    except json.JSONDecodeError:
-        flash('Invalid JSON File', 'error')
-        return redirect(url_for('index'))
+ if 'json_file' not in request.files:
+    flash('No file part in the request. Please select a file.', 'error')
+    return redirect(url_for('index', session='active'))
 
-@app.route('/process_upload_journey', methods=['GET', 'POST'])
+ file = request.files['json_file']
+ if file.filename == '':
+     flash('No file selected. Please choose a JSON file.', 'error')
+     return redirect(url_for('index', session='active'))
+
+ try:
+     journey_data = json.load(file)
+     session['journey_data'] = journey_data
+     return redirect(url_for('process_upload_journey'))
+ except json.JSONDecodeError:
+     flash('Invalid JSON File', 'error')
+     return redirect(url_for('index', session='active'))
+
+@app.route('/upload', methods=['GET', 'POST'])
 def process_upload_journey():
-    """Processes the journey JSON and validates it."""
     journey_data = session.get('journey_data')
     if not journey_data:
-        flash('No JSON data found in session.', 'error')
-        return redirect(url_for('index'))
-    
-    # Retrieve form data from the POST request
-    suffix = request.form.get('suffix_for_report', '')
-    league_club_code = request.form.get('league_club_code_for_report', '')
+        return redirect(url_for('index', session='active'))
 
-    # Check for required fields
-    if not suffix or not league_club_code:
-        flash('Journey Suffix and League/Club Code are required.', 'error')
-        # We redirect back to the index to show the error message.
-        return redirect(url_for('index'))
+    suffix = session.get('suffix_for_report', 'Default_Journey_2024_V1')
+    league_club_code = session.get('league_club_code_for_report', 'Default_League')
 
     try:
         replacements_str = request.form.get('replacements', '')
@@ -364,18 +364,19 @@ def process_upload_journey():
                     parts = line.split('->', 1)
                     if len(parts) == 2 and (find_text := parts[0].strip()):
                         replacements.append((find_text, parts[1].strip()))
-        
+
         triggers_str = request.form.get('opposite_triggers', '')
         triggers = [t.strip() for t in triggers_str.split(',') if t.strip()]
 
         original_data = journey_data
+
         journeyOrgName = original_data.get('orgName', '').lower()
         journeySandboxName = original_data.get('sandboxName', '')
-        JourneyUniqueId = original_data.get('uid', '')
-        journeyLink = f'https://experience.adobe.com/#/@{journeyOrgName}/sname:{journeySandboxName}/journey-optimizer/journeys/journey/{JourneyUniqueId}'
+        JourneyUniqueId =  original_data.get('uid', '')
 
-        corrections, naming_df, summary = validate_and_generate_all_corrections(original_data, suffix, replacements, triggers, league_club_code)
-        
+        journeyLink = f'https://experience.adobe.com/#/@{journeyOrgName}/sname:{journeySandboxName}/journey-optimizer/journeys/journey/{JourneyUniqueId}'
+        corrections, naming_df, summary = validate_and_generate_all_corrections(original_data, suffix, replacements, triggers,league_club_code)
+        flow_results = {}
         corrected_original = correct_original_json(original_data, corrections)
         transformed_data = transform_json_structure(corrected_original)
 
@@ -386,26 +387,25 @@ def process_upload_journey():
         session['league_club_code_for_report'] = league_club_code
         session['replacements_for_report'] = replacements
         session['triggers_for_report'] = triggers
-        session['suffix_for_report'] = suffix
-
-        report_html = ""
         if not naming_df.empty:
             styler = naming_df.style.apply(highlight_fails, axis=1)
             styler.set_table_attributes('class="table table-striped table-bordered table-hover"')
             styler.hide(axis="index")
             report_html = styler.to_html()
-            report_html = report_html.replace('<thead>', '<thead class="table-primary">')
+            report_html = report_html.replace(
+                '<thead>',
+                '<thead class="table-primary">'
+            )
         else:
             report_html = "<p>No validation issues found.</p>"
 
         return render_template('results.html',
-                               journey_name=session['journey_name'],
-                               summary=summary,
-                               naming_results_html=report_html,
-                               journey_link=journeyLink)
+                            journey_name=session['journey_name'],
+                            summary=summary,
+                            naming_results_html=report_html,journey_link=journeyLink)
     except Exception as e:
-        flash(f'An unexpected application error occurred: {e}', 'error')
-        return redirect(url_for('index'))
+                flash(f'An unexpected application error occurred: {e}')
+
 
 @app.route('/', methods=['GET'])
 def index():
@@ -418,19 +418,16 @@ def index():
 def process_journey():
     if 'file' not in request.files or not request.files['file'].filename:
         flash('No file selected.')
-        return redirect(url_for('index'))
-    
+        return redirect(url_for('index', session='active'))
     file = request.files['file']
     suffix = request.form.get('suffix', '').strip()
-    league_club_code = request.form.get('league_club_code', '').strip()
-
+    league_club_code = request.form.get('league_club_code','').strip()
     if not suffix:
         flash('Journey Suffix is required.')
-        return redirect(url_for('index'))
+        return redirect(url_for('index', session='active'))
     if not league_club_code:
-        flash('League or Club Code is required.')
-        return redirect(url_for('index'))
-
+        flash('Leadge or Club Code is required.')
+        return redirect(url_for('index', session='active'))
     try:
         replacements_str = request.form.get('replacements', '')
         replacements = []
@@ -440,7 +437,7 @@ def process_journey():
                     parts = line.split('->', 1)
                     if len(parts) == 2 and (find_text := parts[0].strip()):
                         replacements.append((find_text, parts[1].strip()))
-        
+
         triggers_str = request.form.get('opposite_triggers', '')
         triggers = [t.strip() for t in triggers_str.split(',') if t.strip()]
 
@@ -448,11 +445,11 @@ def process_journey():
 
         journeyOrgName = original_data.get('orgName', '').lower()
         journeySandboxName = original_data.get('sandboxName', '')
-        JourneyUniqueId = original_data.get('uid', '')
-        journeyLink = f'https://experience.adobe.com/#/@{journeyOrgName}/sname:{journeySandboxName}/journey-optimizer/journeys/journey/{JourneyUniqueId}'
+        JourneyUniqueId =  original_data.get('uid', '')
 
-        corrections, naming_df, summary = validate_and_generate_all_corrections(original_data, suffix, replacements, triggers, league_club_code)
-        
+        journeyLink = f'https://experience.adobe.com/#/@{journeyOrgName}/sname:{journeySandboxName}/journey-optimizer/journeys/journey/{JourneyUniqueId}'
+        corrections, naming_df, summary = validate_and_generate_all_corrections(original_data, suffix, replacements, triggers,league_club_code)
+        flow_results = {}
         corrected_original = correct_original_json(original_data, corrections)
         transformed_data = transform_json_structure(corrected_original)
 
@@ -465,25 +462,25 @@ def process_journey():
         session['league_club_code_for_report'] = league_club_code
         session['replacements_for_report'] = replacements
         session['triggers_for_report'] = triggers
-
-        report_html = ""
         if not naming_df.empty:
             styler = naming_df.style.apply(highlight_fails, axis=1)
             styler.set_table_attributes('class="table table-striped table-bordered table-hover"')
             styler.hide(axis="index")
             report_html = styler.to_html()
-            report_html = report_html.replace('<thead>', '<thead class="table-primary">')
+            report_html = report_html.replace(
+                '<thead>',
+                '<thead class="table-primary">'
+            )
         else:
             report_html = "<p>No validation issues found.</p>"
 
         return render_template('results.html',
-                               journey_name=session['journey_name'],
-                               summary=summary,
-                               naming_results_html=report_html,
-                               journey_link=journeyLink)
+                            journey_name=session['journey_name'],
+                            summary=summary,
+                            naming_results_html=report_html,journey_link=journeyLink)
     except Exception as e:
-        flash(f'An unexpected application error occurred: {e}', 'error')
-        return redirect(url_for('index'))
+                flash(f'An unexpected application error occurred: {e}')
+                return redirect(url_for('index', session='active'))
 
 @app.route('/download_excel_report')
 def download_excel_report():
@@ -492,30 +489,23 @@ def download_excel_report():
     replacements = session.get('replacements_for_report', [])
     triggers = session.get('triggers_for_report', [])
     league_club_code = session.get('league_club_code_for_report')
-
-    if not json_data:
-        flash('Report data has expired.', 'error')
-        return redirect(url_for('index'))
-
-    try:
-        _, validation_df, _ = validate_and_generate_all_corrections(json.loads(json_data), suffix, replacements, triggers, league_club_code)
-        processed_dfs = process_ajo_journey(json_data)
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            for sheet_name, df in processed_dfs:
-                if not df.empty:
-                    df.to_excel(writer, sheet_name=sheet_name, index=False)
-                    auto_adjust_column_width(writer.sheets[sheet_name])
-            if not validation_df.empty:
-                validation_df.to_excel(writer, sheet_name='Naming Validation', index=False)
-                auto_adjust_column_width(writer.sheets['Naming Validation'])
-        output.seek(0)
-        safe_filename = re.sub(r'[\W_]+', '_', session.get('journey_name', 'Journey'))
-        return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name=f'{safe_filename}_Validation_Report.xlsx')
-    except Exception as e:
-        flash(f'An error occurred during Excel report generation: {e}', 'error')
-        return redirect(url_for('index'))
-
+    if not json_data or not suffix:
+        flash('Report data has expired.')
+        return redirect(url_for('index', session='active'))
+    _, validation_df, _ = validate_and_generate_all_corrections(json.loads(json_data), suffix, replacements, triggers,league_club_code)
+    processed_dfs = process_ajo_journey(json.dumps(json.loads(json_data)))
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        for sheet_name, df in processed_dfs:
+            if not df.empty:
+                df.to_excel(writer, sheet_name=sheet_name, index=False)
+                auto_adjust_column_width(writer.sheets[sheet_name])
+        if not validation_df.empty:
+            validation_df.to_excel(writer, sheet_name='Naming Validation', index=False)
+            auto_adjust_column_width(writer.sheets['Naming Validation'])
+    output.seek(0)
+    safe_filename = re.sub(r'[\W_]+', '_', session.get('journey_name', 'Journey'))
+    return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name=f'{safe_filename}_Validation_Report.xlsx')
 
 @app.route('/download_corrected_original')
 def download_corrected_original():
@@ -523,7 +513,7 @@ def download_corrected_original():
     filename = session.get('original_filename', 'file.json')
     if not json_str:
         flash('File data has expired.')
-        return redirect(url_for('index'))
+        return redirect(url_for('index', session='active'))
     return send_file(io.BytesIO(json_str.encode('utf-8')), as_attachment=True, download_name=f"CORRECTED_{filename}", mimetype='application/json')
 
 @app.route('/download_transformed')
@@ -532,15 +522,13 @@ def download_transformed():
     filename = session.get('original_filename', 'file.json')
     if not json_str:
         flash('File data has expired.')
-        return redirect(url_for('index'))
+        return redirect(url_for('index', session='active'))
     return send_file(io.BytesIO(json_str.encode('utf-8')), as_attachment=True, download_name=f"TRANSFORMED_{filename}", mimetype='application/json')
 
-#endregion
+# endregion
 
-# This is the standard entry point for production WSGI servers like Gunicorn or uWSGI
-# The check `if __name__ == '__main__':` is for development only.
-# A production server will import the `app` object directly.
+# This part is for local development only. Do not use in production.
 if __name__ == '__main__':
-    # In production, do not run with debug=True as it can expose security vulnerabilities.
-    # The host should also be '0.0.0.0' to be accessible from outside the container/server.
-    app.run(host='0.0.0.0', port=5000)
+    # Use 'app.run(debug=True)' for local development
+    # Do not run in production with debug=True as it can be a security risk.
+    app.run(host='0.0.0.0', port=5050, debug=True)
