@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AJO Journey Validator</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Global Reset for Box Model and Margins/Paddings */
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%; /* Ensure html and body take full height */
+    box-sizing: border-box; /* Include padding and border in the element's total width and height */
+}
+
+*, *::before, *::after {
+    box-sizing: inherit; /* Inherit box-sizing for all elements */
+}
+
+:root {
+    --primary-color: #4A90E2; /* A modern blue */
+    --primary-dark: #357ABD;
+    --secondary-color: #6C757D; /* Grey for text */
+    --background-light: #F8F9FA; /* Light background - now a fallback */
+    --background-card: #FFFFFF; /* Card background */
+    --border-color: #E0E6ED;
+    --text-color: #343A40;
+    --heading-color: #212529;
+    --success-color: #28A745;
+    --error-color: #DC3545;
+    --warning-color: #FFC107;
+    --shadow-light: rgba(0, 0, 0, 0.05);
+    --shadow-medium: rgba(0, 0, 0, 0.1);
+}
+
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background-color: #e0e6ed; /* Fallback color, slightly darker to complement image */
+    background-image: url('{{ url_for('static', filename='images/bg.png') }}'); /* Ensure this path is correct */
+    background-size: cover;
+    background-position: center center;
+    background-repeat: no-repeat;
+    background-attachment: fixed; /* Makes the background fixed while content scrolls */
+    color: var(--text-color);
+    /* Removed padding from body here, it's now applied to the container or via flexbox */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh; /* This should now work correctly */
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow: hidden; /* Add this to explicitly hide any potential overflow */
+}
+
+/* Optional: Add an overlay for better text readability if your image is busy */
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(255, 255, 255, 0.2); /* Semi-transparent white overlay */
+    z-index: -1; /* Place it behind the content but above the background image */
+}
+
+.container {
+    background-color: var(--background-card);
+    padding: 2.5rem 3rem; /* Keep padding here for internal spacing */
+    border-radius: 12px;
+    box-shadow: 0 10px 30px var(--shadow-medium);
+    width: 100%;
+    max-width: 550px;
+    text-align: center;
+    transition: all 0.3s ease-in-out;
+    position: relative; /* Ensure container is above the overlay */
+    z-index: 1;
+    /* Add max-height and overflow-y to the container if content might exceed screen height */
+    max-height: 90vh; /* Limit container height to prevent it from pushing body beyond 100vh */
+    overflow-y: auto; /* Add scrollbar to container if its content overflows */
+    padding-top: 2rem; /* Adjust padding to ensure content is not cut off */
+    padding-bottom: 2rem;
+}
+
+h1 {
+    color: var(--heading-color);
+    margin-bottom: 1.5rem; /* Slightly reduced margin for better fit */
+    font-size: 2.2rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+}
+
+.flash-messages {
+    list-style: none;
+    padding: 0;
+    margin-bottom: 1.25rem; /* Slightly reduced margin */
+}
+
+.flash-messages li {
+    padding: 1rem 1.5rem;
+    border-radius: 8px;
+    margin-bottom: 0.75rem;
+    font-weight: 500;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    box-shadow: 0 2px 8px var(--shadow-light);
+    animation: fadeIn 0.5s ease-out forwards;
+}
+
+.flash-messages li:last-child {
+    margin-bottom: 0;
+}
+
+/* Specific styles for different message types (assuming Flask adds classes or you can parse content) */
+.flash-messages li.error {
+    background-color: #FEE2E2; /* Light red */
+    color: var(--error-color);
+    border: 1px solid #FCA5A5;
+}
+.flash-messages li.success {
+    background-color: #D1FAE5; /* Light green */
+    color: var(--success-color);
+    border: 1px solid #A7F3D0;
+}
+.flash-messages li.info {
+    background-color: #DBEAFE; /* Light blue */
+    color: var(--primary-dark);
+    border: 1px solid #93C5FD;
+}
+.flash-messages li.warning {
+    background-color: #FFFBEB; /* Light yellow */
+    color: var(--warning-color);
+    border: 1px solid #FDE68A;
+}
+
+form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem; /* Reduced gap for a tighter look */
+}
+
+.form-group {
+    text-align: left;
+}
+
+label {
+    display: block;
+    margin-bottom: 0.5rem; /* Slightly reduced margin */
+    font-weight: 600;
+    color: var(--heading-color);
+    font-size: 0.95rem;
+}
+
+label small {
+    font-weight: 400;
+    color: var(--secondary-color);
+    font-size: 0.85rem;
+    margin-left: 0.5rem;
+}
+
+input[type="text"],
+input[type="file"],
+textarea {
+    width: 100%;
+    padding: 0.9rem 1rem; /* Increased padding */
+    border: 1px solid var(--border-color);
+    border-radius: 8px; /* More rounded corners */
+    box-sizing: border-box;
+    font-size: 1rem;
+    font-family: 'Inter', sans-serif;
+    color: var(--text-color);
+    background-color: var(--background-card);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+input[type="text"]:focus,
+input[type="file"]:focus,
+textarea:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.2); /* Focus ring */
+}
+
+input[type="file"] {
+    padding: 0.7rem 1rem; /* Slightly less padding for file input */
+    cursor: pointer;
+}
+
+textarea {
+    min-height: 100px; /* Slightly increased min-height */
+    resize: vertical;
+}
+
+button {
+    background-color: var(--primary-color);
+    color: white;
+    padding: 1rem 2rem; /* More generous padding */
+    border: none;
+    border-radius: 8px;
+    font-size: 1.15rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.3s ease, transform 0.2s ease, box-shadow 0.3s ease;
+    letter-spacing: 0.02em;
+    margin-top: 0.5rem; /* Space above button */
+}
+
+button:hover {
+    background-color: var(--primary-dark);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 15px rgba(74, 144, 226, 0.3);
+}
+
+button:active {
+    transform: translateY(0);
+    box-shadow: 0 3px 10px rgba(74, 144, 226, 0.2);
+}
+
+/* Keyframe animations */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Responsive adjustments */
+@media (max-width: 600px) {
+    body {
+        /* Removed padding from body here, it's handled by container's max-height */
+    }
+    .container {
+        padding: 1.5rem 1.5rem; /* Adjusted padding for smaller screens */
+        border-radius: 8px;
+        box-shadow: 0 5px 20px var(--shadow-medium);
+        max-height: 95vh; /* Allow container to take more height on small screens */
+    }
+    h1 {
+        font-size: 1.8rem;
+        margin-bottom: 1rem;
+    }
+    button {
+        padding: 0.9rem 1.5rem;
+        font-size: 1rem;
+    }
+    .flash-messages li {
+        padding: 0.8rem 1rem;
+        font-size: 0.9rem;
+    }
+}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>AJO Journey Validator</h1>
+
+{% with messages = get_flashed_messages() %}
+    {% if messages %}
+        <ul class="flash-messages">
+        {% for message in messages %}
+            <li class="info">{{ message }}</li>
+        {% endfor %}
+        </ul>
+    {% endif %}
+{% endwith %}
+
+
+
+<form method="POST" action="{{ url_for('process_journey') }}" enctype="multipart/form-data">
+    <div class="form-group">
+        <label for="file">Journey JSON File <small>(Required)</small></label>
+        <input type="file" id="file" name="file" accept=".json" required>
+    </div>
+    <div class="form-group">
+        <label for="suffix">Journey Suffix <small>(e.g., _Birthday_Journey_2025_V1)</small></label>
+        <input type="text" id="suffix" name="suffix" placeholder="Enter journey suffix" required>
+    </div>
+     <div class="form-group">
+        <label for="league_club_code">League / Club Code <small>(e.g., NFL/DEN)</small></label>
+        <input type="text" id="league_club_code" name="league_club_code" placeholder="Enter the League / Club Code" required>
+    </div>       
+   
+    <button type="submit">Validate Journey</button>
+</form>
+</div>
+</body>
+</html>

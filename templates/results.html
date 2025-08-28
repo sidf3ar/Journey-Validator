@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Validation Results for {{ journey_name }}</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" integrity="sha512-Fo3rlrZj/k7ujTnHg4CGR2D7kSs0V4LLanw2qksYuRlEzO+tcaEPQogQ0KaoGN26/zrn20ImR1DfuLWnOo7aBA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<style>
+:root {
+--primary-color: #4A90E2; /* A modern blue */
+--primary-dark: #357ABD;
+--secondary-color: #6C757D; /* Grey for text */
+--background-light: #F8F9FA; /* Light background - now a fallback */
+--background-card: #FFFFFF; /* Card background */
+--border-color: #E0E6ED;
+--text-color: #343A40;
+--heading-color: #212529;
+--success-color: #28A745;
+--error-color: #DC3545;
+--warning-color: #FFC107;
+--info-color: #17A2B8; /* For info badges */
+--shadow-light: rgba(0, 0, 0, 0.05);
+--shadow-medium: rgba(0, 0, 0, 0.1);
+--shadow-strong: rgba(0, 0, 0, 0.15);
+}
+
+body {
+font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+background-color: #e0e6ed; /* Fallback color, slightly darker to complement image */
+background-image: url('{{ url_for('static', filename='images/bg.png') }}'); /* Ensure this path is correct */
+background-size: cover;
+background-position: center center;
+background-repeat: no-repeat;
+background-attachment: fixed; /* Makes the background fixed while content scrolls */
+color: var(--text-color);
+margin: 0;
+padding: 2rem;
+display: flex;
+flex-direction: column;
+align-items: center;
+min-height: 100vh;
+line-height: 1.6;
+-webkit-font-smoothing: antialiased;
+-moz-osx-font-smoothing: grayscale;
+}
+
+/* Optional: Add an overlay for better text readability if your image is busy */
+body::before {
+content: '';
+position: fixed;
+top: 0;
+left: 0;
+width: 100%;
+height: 100%;
+background-color: rgba(255, 255, 255, 0.2); /* Semi-transparent white overlay */
+z-index: -1; /* Place it behind the content but above the background image */
+}
+
+.container {
+width: 100%;
+max-width: 1200px; /* Wider container for results */
+margin-top: 2rem;
+margin-bottom: 2rem;
+display: flex;
+flex-direction: column;
+gap: 1.5rem; /* Spacing between sections */
+position: relative; /* Ensure container is above the overlay */
+z-index: 1;
+}
+
+.section-card {
+background-color: var(--background-card);
+padding: 2rem;
+border-radius: 12px;
+box-shadow: 0 10px 30px var(--shadow-medium);
+transition: all 0.3s ease-in-out;
+}
+
+.section-card-header {
+border-bottom: 1px solid var(--border-color);
+padding-bottom: 1rem;
+margin-bottom: 1.5rem;
+display: flex;
+justify-content: space-between;
+align-items: center;
+}
+
+.section-card-header h2, .section-card-header h3 {
+color: var(--heading-color);
+font-size: 1.8rem;
+font-weight: 600;
+margin: 0;
+}
+
+/* Combined Header & Download Section */
+.combined-header-card {
+background-color: var(--background-card);
+padding: 2rem; /* Consistent padding */
+border-radius: 12px; /* Consistent border-radius */
+box-shadow: 0 10px 30px var(--shadow-medium); /* Consistent shadow */
+text-align: center; /* Center content within this card */
+}
+
+.combined-header-card .page-title {
+margin-bottom: 2rem; /* Space between title and download buttons */
+}
+
+.combined-header-card .page-title h1 {
+color: var(--heading-color);
+font-size: 2.8rem;
+font-weight: 700;
+margin-bottom: 0.5rem;
+letter-spacing: -0.03em;
+}
+
+.combined-header-card .page-title p {
+font-size: 1.1rem;
+color: var(--secondary-color);
+}
+
+.combined-header-card .page-title strong {
+color: var(--primary-dark);
+}
+
+/* Form Styling */
+.form-upload {
+margin-bottom: 2rem; /* Space between form and download buttons */
+background-color: var(--background-light);
+padding: 1.5rem;
+border-radius: 10px;
+border: 1px dashed var(--border-color);
+display: flex;
+flex-direction: column;
+align-items: center;
+gap: 1rem;
+box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.form-upload label {
+font-size: 1.1rem;
+font-weight: 600;
+color: var(--heading-color);
+display: flex;
+align-items: center;
+gap: 0.5rem;
+cursor: pointer;
+}
+
+.form-upload label i {
+color: var(--primary-color);
+font-size: 1.3rem;
+}
+
+.form-upload input[type="file"] {
+display: none; /* Hide the default file input */
+}
+
+/* Custom file input button */
+.custom-file-upload {
+display: inline-block;
+background-color: var(--primary-color);
+color: white;
+padding: 0.8rem 1.5rem;
+border-radius: 8px;
+cursor: pointer;
+font-size: 1rem;
+font-weight: 600;
+transition: background-color 0.3s ease, transform 0.2s ease, box-shadow 0.3s ease;
+box-shadow: 0 4px 10px rgba(74, 144, 226, 0.2);
+display: flex;
+align-items: center;
+gap: 0.5rem;
+}
+
+.custom-file-upload:hover {
+background-color: var(--primary-dark);
+transform: translateY(-2px);
+box-shadow: 0 6px 15px rgba(74, 144, 226, 0.3);
+}
+
+.custom-file-upload:active {
+transform: translateY(0);
+box-shadow: 0 3px 10px rgba(74, 144, 226, 0.2);
+}
+
+/* Display selected file name */
+#file-name-display {
+font-size: 0.95rem;
+color: var(--secondary-color);
+margin-top: 0.5rem;
+font-style: italic;
+}
+
+.combined-header-card .download-buttons {
+display: flex;
+flex-wrap: wrap;
+justify-content: center;
+gap: 1rem; /* Space between buttons */
+}
+
+.combined-header-card .download-buttons h3 {
+width: 100%;
+margin-bottom: 1rem;
+color: var(--heading-color);
+font-size: 1.5rem;
+font-weight: 600;
+}
+
+.btn-download {
+background-color: var(--primary-color);
+color: white;
+padding: 0.8rem 1.5rem;
+border: none;
+border-radius: 8px;
+font-size: 1rem;
+font-weight: 600;
+cursor: pointer;
+transition: background-color 0.3s ease, transform 0.2s ease, box-shadow 0.3s ease;
+display: inline-flex;
+align-items: center;
+gap: 0.5rem;
+text-decoration: none;
+}
+
+.btn-download:hover {
+background-color: var(--primary-dark);
+transform: translateY(-2px);
+box-shadow: 0 6px 15px rgba(74, 144, 226, 0.3);
+}
+
+.btn-download:active {
+transform: translateY(0);
+box-shadow: 0 3px 10px rgba(74, 144, 226, 0.2);
+}
+
+/* Specific button colors */
+.btn-download.excel { background-color: var(--success-color); }
+.btn-download.excel:hover { background-color: #218838; }
+
+.btn-download.corrected { background-color: var(--info-color); }
+.btn-download.corrected:hover { background-color: #138496; }
+
+.btn-download.transformed { background-color: var(--primary-color); }
+.btn-download.transformed:hover { background-color: var(--primary-dark); }
+
+/* Summary Card */
+.summary-grid {
+display: grid;
+grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+gap: 1.5rem;
+text-align: center;
+}
+
+.summary-item {
+background-color: var(--background-light);
+padding: 1.5rem;
+border-radius: 10px;
+box-shadow: 0 2px 10px var(--shadow-light);
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+gap: 0.5rem;
+}
+
+.summary-item strong {
+font-size: 1.1rem;
+color: var(--heading-color);
+margin-bottom: 0.5rem;
+}
+
+.badge-result {
+display: inline-block;
+padding: 0.6em 1em;
+border-radius: 20px;
+font-size: 0.95rem;
+font-weight: 600;
+color: white;
+min-width: 100px; /* Ensure consistent width */
+}
+
+.badge-result.passed {
+background-color: var(--success-color);
+}
+.badge-result.failed {
+background-color: var(--error-color);
+}
+.badge-result.partial {
+background-color: var(--warning-color);
+}
+.badge-result.info {
+background-color: var(--info-color);
+}
+
+/* Detailed Report Table */
+.table-responsive {
+overflow-x: auto;
+}
+
+table {
+width: 100%;
+border-collapse: collapse;
+margin-top: 1rem;
+font-size: 0.95rem;
+}
+
+table th, table td {
+padding: 12px 15px;
+text-align: left;
+border-bottom: 1px solid var(--border-color);
+}
+
+table th {
+background-color: var(--background-light);
+color: var(--heading-color);
+font-weight: 600;
+text-transform: uppercase;
+font-size: 0.85rem;
+letter-spacing: 0.05em;
+}
+
+table tbody tr:hover {
+background-color: #F0F4F8; /* Light hover effect */
+}
+
+table tbody tr:last-child td {
+border-bottom: none;
+}
+
+/* No data message */
+.no-data {
+text-align: center;
+padding: 2rem;
+color: var(--secondary-color);
+font-style: italic;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+body {
+    padding: 1rem;
+}
+.container {
+    margin-top: 1rem;
+    margin-bottom: 1rem;
+    gap: 1rem;
+}
+.section-card {
+    padding: 1.5rem;
+    border-radius: 8px;
+}
+.combined-header-card { /* Adjusted for smaller screens */
+    padding: 1.5rem;
+    border-radius: 8px;
+}
+.combined-header-card .page-title h1 {
+    font-size: 2.2rem;
+}
+.combined-header-card .page-title p {
+    font-size: 1rem;
+}
+.combined-header-card .download-buttons {
+    flex-direction: column;
+    gap: 0.8rem;
+}
+.btn-download {
+    width: 100%;
+    font-size: 0.95rem;
+    padding: 0.7rem 1rem;
+}
+.summary-grid {
+    grid-template-columns: 1fr; /* Stack summary items on small screens */
+    gap: 1rem;
+}
+.summary-item {
+    padding: 1rem;
+}
+table th, table td {
+    padding: 10px 12px;
+}
+.form-upload {
+    padding: 1rem;
+}
+.form-upload label {
+    font-size: 1rem;
+}
+.custom-file-upload {
+    width: 100%;
+    justify-content: center;
+}
+}
+
+@media (max-width: 480px) {
+.combined-header-card .page-title h1 {
+    font-size: 1.8rem;
+}
+.section-card-header h2, .section-card-header h3 {
+    font-size: 1.5rem;
+}
+}
+</style>
+<script>
+function autoSubmit() {
+    const fileInput = document.getElementById('json_file');
+    const fileNameDisplay = document.getElementById('file-name-display');
+
+    // Add event listener for when a file is selected
+    fileInput.addEventListener('change', function() {
+        if (fileInput.files.length > 0) {
+            fileNameDisplay.textContent = `Selected: ${fileInput.files[0].name}`;
+            document.getElementById('upload_form').submit(); // Auto-submit the form
+        } else {
+            fileNameDisplay.textContent = 'No file selected.';
+        }
+    });
+
+    // Optional: Initialize display if a file is already present (e.g., after a refresh with pre-filled form)
+    if (fileInput.files.length > 0) {
+        fileNameDisplay.textContent = `Selected: ${fileInput.files[0].name}`;
+    }
+}
+
+// Call autoSubmit on page load
+document.addEventListener('DOMContentLoaded', autoSubmit);
+</script>
+</head>
+<body>
+
+<div class="container">
+
+<!-- Combined Page Header and Download Links Section -->
+<div class="combined-header-card">
+    <div class="page-title">
+        <h1>Validation Report</h1>
+        <p>Results for journey: <strong><a href="{{journey_link}}" target="_blank" title="Click to View Journey">{{ journey_name }}</a></strong></p>
+    </div>
+
+    <!-- Form Section -->
+    <div class="form-upload">
+        <form id="upload_form" method="POST" action="{{ url_for('upload') }}" enctype="multipart/form-data">
+            <label for="json_file" class="custom-file-upload">
+                <i class="fas fa-upload"></i> Upload JSON Payload
+            </label>
+            <input type="file" id="json_file" name="json_file" accept=".json" required>
+        </form>
+        <span id="file-name-display">No file selected.</span>
+    </div>
+
+    <div class="download-buttons">
+        <h3>Download Files</h3>
+        <a href="{{ url_for('download_excel_report') }}" class="btn-download excel">
+            <i class="fas fa-file-excel"></i> Download Excel Report
+        </a>
+        <!-- <a href="{{ url_for('download_corrected_original') }}" class="btn-download corrected">
+            <i class="fas fa-file-download"></i> Download Corrected Original
+        </a>
+        <a href="{{ url_for('download_transformed') }}" class="btn-download transformed">
+            <i class="fas fa-file-archive"></i> Download Transformed File
+        </a> -->
+    </div>
+</div>
+
+<!-- Summary Card -->
+<div class="section-card">
+    <div class="section-card-header">
+        <h2>Validation Summary</h2>
+    </div>
+    <div class="section-card-body">
+        {% if summary %}
+            <div class="summary-grid">
+                <!-- Flow & Sequence Check -->
+                <div class="summary-item">
+                    <strong>Flow & Sequence Check</strong>
+                    <span class="badge-result {% if summary.flow_sequence.passed == summary.flow_sequence.total %}passed{% else %}partial{% endif %}">
+                        {{ summary.flow_sequence.passed }} / {{ summary.flow_sequence.total }} Passed
+                    </span>
+                </div>
+                <!-- Path Suffix Check -->
+                <div class="summary-item">
+                    <strong>Path Suffix Check</strong>
+                    <span class="badge-result {% if summary.suffix.passed == summary.suffix.total %}passed{% else %}partial{% endif %}">
+                        {{ summary.suffix.passed }} / {{ summary.suffix.total }} Passed
+                    </span>
+                </div>
+                <!-- Opposite Prefix Check -->
+                <div class="summary-item">
+                    <strong>Opposite Prefix Check</strong>
+                    <span class="badge-result {% if summary.opposite_prefix.passed == summary.opposite_prefix.total %}passed{% else %}partial{% endif %}">
+                        {{ summary.opposite_prefix.passed }} / {{ summary.opposite_prefix.total }} Passed
+                    </span>
+                </div>
+
+                 <!-- Duplicate Node Label Check -->
+                <div class="summary-item">
+                    <strong>Duplicate Node Label Check</strong>
+                    <span class="badge-result {% if summary.duplicate_node_labels.found == 0 %}passed{% else %}partial{% endif %}">
+                      {{ summary.duplicate_node_labels.found }} Found
+                    </span>
+                </div>
+
+                 <!-- Duplicate Path Name Check -->
+                <div class="summary-item">
+                    <strong>Duplicate Path Name Check</strong>
+                    <span class="badge-result {% if summary.duplicate_path_names.found == 0 %}passed{% else %}partial{% endif %}">
+                         {{ summary.duplicate_path_names.found }} Found
+                    </span>
+                </div>
+
+            </div>
+        {% else %}
+            <p class="no-data">No summary data available.</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Detailed Report Table -->
+<div class="section-card">
+    <div class="section-card-header">
+        <h2>Detailed Report</h2>
+    </div>
+    <div class="section-card-body table-responsive">
+        {% if naming_results_html %}
+            {{ naming_results_html | safe }}
+        {% else %}
+            <p class="no-data">No detailed report data available.</p>
+        {% endif %}
+    </div>
+</div>
+
+</div>
+
+</body>
+</html>
